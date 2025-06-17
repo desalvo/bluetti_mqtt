@@ -3,6 +3,7 @@ from typing import List
 from ..commands import ReadHoldingRegisters
 from .bluetti_device import BluettiDevice
 from .struct import DeviceStruct
+from .v2_device import ChargingMode
 
 
 @unique
@@ -19,13 +20,6 @@ class EcoShutdown(Enum):
     TWO_HOURS = 2
     THREE_HOURS = 3
     FOUR_HOURS = 4
-
-
-@unique
-class ChargingMode(Enum):
-    STANDARD = 0
-    SILENT = 1
-    TURBO = 2
 
 
 class EB3A(BluettiDevice):

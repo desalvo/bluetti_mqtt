@@ -6,6 +6,7 @@ from bleak import BleakClient, BleakError
 from bleak.exc import BleakDeviceNotFoundError
 from bluetti_mqtt.core import DeviceCommand
 from .exc import BadConnectionError, ModbusError, ParseError
+from .encryption import Connection, PassthroughConnection, EncryptedConnection
 
 
 @unique
@@ -25,15 +26,24 @@ class BluetoothClient:
     DEVICE_NAME_UUID = '00002a00-0000-1000-8000-00805f9b34fb'
 
     name: Union[str, None]
+    connection: Connection
+
     current_command: DeviceCommand
     notify_future: asyncio.Future
     notify_response: bytearray
 
-    def __init__(self, address: str):
+    def __init__(self, address: str, is_encrypted: bool):
         self.address = address
         self.state = ClientState.NOT_CONNECTED
         self.name = None
         self.client = BleakClient(self.address)
+        self.connection = EncryptedConnection(
+            on_plaintext_packet=self._on_packet,
+            write=self._write,
+        ) if is_encrypted else PassthroughConnection(
+            on_plaintext_packet=self._on_packet,
+            write=self._write
+        )
         self.command_queue = asyncio.Queue()
         self.notify_future = None
         self.loop = asyncio.get_running_loop()
@@ -65,7 +75,7 @@ class BluetoothClient:
                 elif self.state == ClientState.DISCONNECTING:
                     await self._disconnect()
                 else:
-                    logging.warn(f'Unexpected current state {self.state}')
+                    logging.warning(f'Unexpected current state {self.state}')
                     self.state = ClientState.NOT_CONNECTED
         finally:
             # Ensure that we disconnect
@@ -100,9 +110,16 @@ class BluetoothClient:
             await self.client.start_notify(
                 self.NOTIFY_UUID,
                 self._notification_handler)
+            await self.connection.wait_until_ready()
             self.state = ClientState.READY
         except BleakError:
             self.state = ClientState.DISCONNECTING
+
+    async def _write(self, buffer: bytes):
+        return await self.client.write_gatt_char(
+            self.WRITE_UUID,
+            buffer
+        )
 
     async def _perform_command(self):
         cmd, cmd_future = await self.command_queue.get()
@@ -116,9 +133,7 @@ class BluetoothClient:
                 self.notify_response = bytearray()
 
                 # Make request
-                await self.client.write_gatt_char(
-                    self.WRITE_UUID,
-                    bytes(self.current_command))
+                await self.connection.write(bytes(self.current_command))
 
                 # Wait for response
                 res = await asyncio.wait_for(
@@ -162,11 +177,14 @@ class BluetoothClient:
 
     async def _disconnect(self):
         await self.client.disconnect()
-        logging.warn(f'Delayed reconnect to {self.address} after error')
+        logging.warning(f'Delayed reconnect to {self.address} after error')
         await asyncio.sleep(5)
         self.state = ClientState.NOT_CONNECTED
 
     def _notification_handler(self, _sender: int, data: bytearray):
+        asyncio.create_task(self.connection.on_packet(data))
+
+    async def _on_packet(self, data: bytearray):
         # Ignore notifications we don't expect
         if not self.notify_future or self.notify_future.done():
             return

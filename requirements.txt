@@ -1,5 +1,8 @@
-aiomqtt==2.1.0
-bleak==0.22.2
+aiomqtt==2.4.0
+bleak==0.22.3
 crcmod==1.7
+cryptography==44.0.0
+dbus-next==0.2.3
 paho-mqtt==2.1.0
+pyasn1==0.6.1
 prometheus_client==0.21.0

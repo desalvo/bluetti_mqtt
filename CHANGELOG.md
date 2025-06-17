@@ -2,6 +2,10 @@
 
 ## FUTURE
 
+## 0.15.3
+
+* Support V2 devices and encryption, based on https://github.com/nhurman/bluetti_mqtt
+
 ## 0.15.2
 
 * Add prometheus exporter option

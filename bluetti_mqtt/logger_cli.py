@@ -51,14 +51,14 @@ async def log_command(client: BluetoothClient, device: BluettiDevice, command: D
         log_invalid(log_file, err, command)
 
 
-async def log(address: str, path: str):
+async def log(address: str, encrypted: bool, path: str, interval: int = 1):
     devices = await check_addresses({address})
     if len(devices) == 0:
         sys.exit('Could not find the given device to connect to')
     device = devices[0]
 
     print(f'Connecting to {device.address}')
-    client = BluetoothClient(device.address)
+    client = BluetoothClient(device.address, encrypted)
     asyncio.get_running_loop().create_task(client.run())
 
     with open(path, 'a') as log_file:
@@ -74,18 +74,19 @@ async def log(address: str, path: str):
                 await log_command(client, device, command, log_file)
 
             # Skip pack polling if not available
-            if len(device.pack_logging_commands) == 0:
-                continue
+            if len(device.pack_logging_commands) > 0:
+                for pack in range(1, device.pack_num_max + 1):
+                    # Send pack set command if the device supports more than 1 pack
+                    if device.pack_num_max > 1:
+                        command = device.build_setter_command('pack_num', pack)
+                        await log_command(client, device, command, log_file)
+                        await asyncio.sleep(10)  # We need to wait after switching packs for the data to be available
 
-            for pack in range(1, device.pack_num_max + 1):
-                # Send pack set command if the device supports more than 1 pack
-                if device.pack_num_max > 1:
-                    command = device.build_setter_command('pack_num', pack)
-                    await log_command(client, device, command, log_file)
-                    await asyncio.sleep(10)  # We need to wait after switching packs for the data to be available
+                    for command in device.pack_logging_commands:
+                        await log_command(client, device, command, log_file)
 
-                for command in device.pack_logging_commands:
-                    await log_command(client, device, command, log_file)
+            await asyncio.sleep(interval)
+
 
 
 def main():
@@ -108,6 +109,17 @@ def main():
         metavar='PATH',
         help='Connect and log data for the device to the given file')
     parser.add_argument(
+        '--encrypted',
+        action='store_true',
+        help='Turn on encryption (refer to the scan output)'
+    )
+    parser.add_argument(
+        '--interval',
+        default=5,
+        type=int,
+        help='The polling interval - set to 0 to poll as fast as possible'
+    )
+    parser.add_argument(
         'address',
         metavar='ADDRESS',
         nargs='?',
@@ -116,10 +128,10 @@ def main():
     if args.scan:
         asyncio.run(scan_devices())
     elif args.log:
-        asyncio.run(log(args.address, args.log))
+        asyncio.run(log(args.address, args.encrypted, args.log, args.interval))
     else:
         parser.print_help()
 
 
 if __name__ == "__main__":
-    main(sys.argv)
+    main()

@@ -49,14 +49,19 @@ class CommandLineHandler:
             help='The optional MQTT broker password')
         parser.add_argument(
             '--interval',
-            default=0,
+            default=5,
             type=int,
-            help='The polling interval - default is to poll as fast as possible')
+            help='The polling interval - set to 0 to poll as fast as possible')
         parser.add_argument(
             '--ha-config',
             default='normal',
             choices=['normal', 'none', 'advanced'],
             help='What fields to configure in Home Assistant - defaults to most fields ("normal")')
+        parser.add_argument(
+            '-v',
+            action='store_true',
+            help='Verbose output'
+        )
         parser.add_argument(
             'addresses',
             metavar='ADDRESS',
@@ -69,6 +74,8 @@ class CommandLineHandler:
             asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
         args = parser.parse_args()
+        setup_logging(logging.DEBUG if args.v else logging.INFO)
+
         if args.scan:
             asyncio.run(scan_devices())
         elif args.hostname and len(args.addresses) > 0:
@@ -147,7 +154,7 @@ async def shutdown(loop: asyncio.AbstractEventLoop):
     loop.stop()
 
 
-def main(argv=None):
+def setup_logging(level):
     debug = os.environ.get('DEBUG')
     level = logging.INFO
     if debug:
@@ -160,6 +167,7 @@ def main(argv=None):
         level=level
     )
 
+def main(argv=None):
     cli = CommandLineHandler(argv)
     cli.execute()
 

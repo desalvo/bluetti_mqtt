@@ -13,10 +13,11 @@ def swap_bytes(data: bytes):
 
 
 class DeviceField:
-    def __init__(self, name: str, address: int, size: int):
+    def __init__(self, name: str, address: int, size: int, chunk_size: int = 2):
         self.name = name
         self.address = address
         self.size = size
+        self.chunk_size = chunk_size
 
     def parse(self, data: bytes) -> Any:
         raise NotImplementedError
@@ -24,7 +25,21 @@ class DeviceField:
     def in_range(self, val: Any) -> bool:
         return True
 
+class Uint8Field(DeviceField):
+    def __init__(self, name: str, address: int, range: Optional[Tuple[int, int]]):
+        self.range = range
+        super().__init__(name, address, 1, chunk_size=1)
 
+    def parse(self, data: bytes) -> int:
+        return data[0]
+
+    def in_range(self, val: int) -> bool:
+        if self.range is None:
+            return True
+        else:
+            return val >= self.range[0] and val <= self.range[1]
+
+# uint16
 class UintField(DeviceField):
     def __init__(self, name: str, address: int, range: Optional[Tuple[int, int]]):
         self.range = range
@@ -39,6 +54,19 @@ class UintField(DeviceField):
         else:
             return val >= self.range[0] and val <= self.range[1]
 
+class Uint32Field(DeviceField):
+    def __init__(self, name: str, address: int, range: Optional[Tuple[int, int]]):
+        self.range = range
+        super().__init__(name, address, 2)
+
+    def parse(self, data: bytes) -> int:
+        return data[2] << 24 | data[3] << 16 | data[0] << 8 | data[1]
+
+    def in_range(self, val: int) -> bool:
+        if self.range is None:
+            return True
+        else:
+            return val >= self.range[0] and val <= self.range[1]
 
 class BoolField(DeviceField):
     def __init__(self, name: str, address: int):
@@ -74,6 +102,22 @@ class DecimalField(DeviceField):
         else:
             return val >= self.range[0] and val <= self.range[1]
 
+
+class Decimal32Field(DeviceField):
+    def __init__(self, name: str, address: int, scale: int, range: Optional[Tuple[int, int]]):
+        self.scale = scale
+        self.range = range
+        super().__init__(name, address, 2)
+
+    def parse(self, data: bytes) -> Decimal:
+        val = data[2] << 24 | data[3] << 16 | data[0] << 8 | data[1]
+        return val / 10 ** self.scale
+
+    def in_range(self, val: Decimal) -> bool:
+        if self.range is None:
+            return True
+        else:
+            return val >= self.range[0] and val <= self.range[1]
 
 class DecimalArrayField(DeviceField):
     def __init__(self, name: str, address: int, size: int, scale: int):
@@ -118,11 +162,18 @@ class SerialNumberField(DeviceField):
 class DeviceStruct:
     fields: List[DeviceField]
 
-    def __init__(self):
+    def __init__(self, chunk_size=2):
+        self.chunk_size = chunk_size
         self.fields = []
+
+    def add_uint8_field(self, name: str, address: int, range: Tuple[int, int] = None):
+        self.fields.append(Uint8Field(name, address, range))
 
     def add_uint_field(self, name: str, address: int, range: Tuple[int, int] = None):
         self.fields.append(UintField(name, address, range))
+
+    def add_uint32_field(self, name: str, address: int, range: Tuple[int, int] = None):
+        self.fields.append(Uint32Field(name, address, range))
 
     def add_bool_field(self, name: str, address: int):
         self.fields.append(BoolField(name, address))
@@ -132,6 +183,9 @@ class DeviceStruct:
 
     def add_decimal_field(self, name: str, address: int, scale: int, range: Tuple[int, int] = None):
         self.fields.append(DecimalField(name, address, scale, range))
+
+    def add_decimal32_field(self, name: str, address: int, scale: int, range: Tuple[int, int] = None):
+        self.fields.append(Decimal32Field(name, address, scale, range))
 
     def add_decimal_array_field(self, name: str, address: int, size: int, scale: int):
         self.fields.append(DecimalArrayField(name, address, size, scale))
@@ -149,9 +203,9 @@ class DeviceStruct:
         self.fields.append(SerialNumberField(name, address))
 
     def parse(self, starting_address: int, data: bytes) -> dict:
-        # Offsets and size are counted in 2 byte chunks, so for the range we
-        # need to divide the byte size by 2
-        data_size = int(len(data) / 2)
+        # Offsets and size are counted in byte chunks, so for the range we
+        # need to divide the byte size by the chunk size
+        data_size = int(len(data) / self.chunk_size)
 
         # Filter out fields not in range
         r = range(starting_address, starting_address + data_size)
@@ -161,8 +215,8 @@ class DeviceStruct:
         # Parse fields
         parsed = {}
         for f in fields:
-            data_start = 2 * (f.address - starting_address)
-            field_data = data[data_start:data_start + 2 * f.size]
+            data_start = self.chunk_size * (f.address - starting_address)
+            field_data = data[data_start:data_start + f.chunk_size * f.size]
             val = f.parse(field_data)
 
             # Skip if the value is "out-of-range" - sometimes the sensors

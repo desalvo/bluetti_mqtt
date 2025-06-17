@@ -4,6 +4,7 @@ from typing import Dict, List
 from bleak import BleakScanner
 from bluetti_mqtt.core import DeviceCommand
 from .client import BluetoothClient
+from .encryption import is_device_using_encryption
 
 
 class MultiDeviceManager:
@@ -17,10 +18,18 @@ class MultiDeviceManager:
         logging.info(f'Connecting to clients: {self.addresses}')
 
         # Perform a blocking scan just to speed up initial connect
-        await BleakScanner.discover()
+        # We also need some info from the advertisement data
+        devices = await BleakScanner.discover(return_adv=True)
 
         # Start client loops
-        self.clients = {a: BluetoothClient(a) for a in self.addresses}
+        self.clients = {}
+        for address in self.addresses:
+            if (scan_record := devices.get(address)) is not None:
+                encryped = is_device_using_encryption(scan_record[1].manufacturer_data)
+                self.clients[address] = BluetoothClient(address, encryped)
+            else:
+                logging.warning(f"Address {address} not found in scan data")
+
         await asyncio.gather(*[c.run() for c in self.clients.values()])
 
     def is_ready(self, address: str):

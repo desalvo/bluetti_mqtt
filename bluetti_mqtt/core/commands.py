@@ -3,11 +3,11 @@ from .utils import modbus_crc
 
 
 class DeviceCommand:
-    def __init__(self, function_code: int, data: bytes):
+    def __init__(self, function_code: int, data: bytes, slaver_addr : int = 1):
         self.function_code = function_code
 
         self.cmd = bytearray(len(data) + 4)
-        self.cmd[0] = 1  # MODBUS address
+        self.cmd[0] = slaver_addr  # MODBUS address
         self.cmd[1] = function_code
         self.cmd[2:-2] = data
         struct.pack_into('<H', self.cmd, -2, modbus_crc(self.cmd[:-2]))
@@ -40,13 +40,12 @@ class DeviceCommand:
         """Returns the raw body of the response"""
         return response
 
-
 class ReadHoldingRegisters(DeviceCommand):
-    def __init__(self, starting_address: int, quantity: int):
+    def __init__(self, starting_address: int, quantity: int, slaver_addr : int = 1):
         self.starting_address = starting_address
         self.quantity = quantity
 
-        super().__init__(3, struct.pack('!HH', starting_address, quantity))
+        super().__init__(3, struct.pack('!HH', starting_address, quantity), slaver_addr)
 
     def response_size(self):
         # 3 byte header

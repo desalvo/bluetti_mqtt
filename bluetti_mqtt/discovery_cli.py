@@ -1,4 +1,5 @@
 import argparse
+import logging
 import asyncio
 import base64
 from bleak import BleakError, BleakScanner
@@ -10,6 +11,7 @@ import time
 from typing import cast
 from bluetti_mqtt.bluetooth import BluetoothClient, ModbusError, ParseError, BadConnectionError
 from bluetti_mqtt.core import ReadHoldingRegisters
+from bluetti_mqtt.bluetooth.encryption import is_device_using_encryption
 
 
 def log_packet(output: TextIOWrapper, data: bytes, command: ReadHoldingRegisters):
@@ -48,17 +50,18 @@ async def log_command(client: BluetoothClient, command: ReadHoldingRegisters, lo
 
 async def scan_devices():
     print('Scanning....')
-    devices = await BleakScanner.discover()
+    devices = await BleakScanner.discover(return_adv=True)
     if len(devices) == 0:
         print('0 devices found - something probably went wrong')
     else:
-        for d in devices:
-            print(f'Found {d.name}: address {d.address}')
+        for d, adv in devices.values():
+            enc = ' (bluetti, encrypted)' if is_device_using_encryption(adv.manufacturer_data) else ''
+            print(f'Found {d.name}: address {d.address}{enc}')
 
 
-async def discover(address: str, path: str):
+async def discover(address: str, encrypted: bool, path: str):
     print(f'Connecting to {address}')
-    client = BluetoothClient(address)
+    client = BluetoothClient(address, encrypted)
     asyncio.get_running_loop().create_task(client.run())
 
     with open(path, 'a') as log_file:
@@ -111,18 +114,34 @@ def main():
         metavar='PATH',
         help='Connect and write discovered data for the device to the file')
     parser.add_argument(
+        '--encrypted',
+        action='store_true',
+        help='Turn on encryption (refer to the scan output)'
+    )
+    parser.add_argument(
+        '-v',
+        action='store_true',
+        help='Verbose output'
+    )
+    parser.add_argument(
         'address',
         metavar='ADDRESS',
         nargs='?',
         help='The device MAC to connect to for discovery')
     args = parser.parse_args()
+
+    if args.v:
+        logging.basicConfig(level=logging.DEBUG)
+    else:
+        logging.basicConfig(level=logging.INFO)
+
     if args.scan:
         asyncio.run(scan_devices())
     elif args.log:
-        asyncio.run(discover(args.address, args.log))
+        asyncio.run(discover(args.address, args.encrypted, args.log))
     else:
         parser.print_help()
 
 
 if __name__ == "__main__":
-    main(sys.argv)
+    main()
