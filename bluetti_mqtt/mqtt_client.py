@@ -29,7 +29,7 @@ class MqttFieldConfig:
     id_override: Optional[str] = None  # Used to override Home Assistant field id
 
 
-COMMAND_TOPIC_RE = re.compile(r'^bluetti/command/(\w+)-(\d+)/([a-z_]+)$')
+COMMAND_TOPIC_RE = re.compile(r'^bluetti/command/([\w ]+)-(\d+)/([a-z_]+)$')
 NORMAL_DEVICE_FIELDS = {
     'dc_input_power': MqttFieldConfig(
         type=MqttFieldType.NUMERIC,
@@ -326,7 +326,7 @@ NORMAL_DEVICE_FIELDS = {
     ),
     'battery_range_end': MqttFieldConfig(
         type=MqttFieldType.NUMERIC,
-        setter=True,
+        setter=False,
         advanced=False,
         home_assistant_extra={
             'name': 'Battery Range End',
@@ -383,6 +383,24 @@ NORMAL_DEVICE_FIELDS = {
         advanced=False,
         home_assistant_extra={
             'name': 'ECO',
+            'icon': 'mdi:sprout',
+        }
+    ),
+    'dc_eco_on': MqttFieldConfig(
+        type=MqttFieldType.BOOL,
+        setter=True,
+        advanced=False,
+        home_assistant_extra={
+            'name': 'DC_ECO',
+            'icon': 'mdi:sprout',
+        }
+    ),
+    'ac_eco_on': MqttFieldConfig(
+        type=MqttFieldType.BOOL,
+        setter=True,
+        advanced=False,
+        home_assistant_extra={
+            'name': 'AC_ECO',
             'icon': 'mdi:sprout',
         }
     ),
@@ -463,7 +481,7 @@ PROMETHEUS_FIELDS = {
     'total_battery_percent': Gauge('bluetti_total_battery_percent','Total battery percent'),
     'ac_output_on': Gauge('bluetti_ac_output_on','AC output on'),
     'dc_output_on': Gauge('bluetti_dc_output_on','DC output on'),
-    'ac_output_mode': Gauge('bluetti_ac_output_mode','AC aoutput mode'),
+    'ac_output_mode': Gauge('bluetti_ac_output_mode','AC output mode'),
     'internal_ac_voltage': Gauge('bluetti_internal_ac_voltage','Internal AC voltage'),
     'internal_current_one': Gauge('bluetti_internal_current_one','Internal current one'),
     'internal_power_one': Gauge('bluetti_internal_power_one','Internal power one'),
@@ -488,6 +506,8 @@ PROMETHEUS_FIELDS = {
     'power_off': Gauge('bluetti_power_off','Power off'),
     'auto_sleep_mode': Gauge('bluetti_auto_sleep_mode','Auto sleep mode'),
     'eco_on': Gauge('bluetti_eco_on','Eco on'),
+    'ac_eco_on': Gauge('bluetti_ac_eco_on','AC Eco on'),
+    'dc_eco_on': Gauge('bluetti_dc_eco_on','DC Eco on'),
     'eco_shutdown': Gauge('bluetti_eco_shutdown','Eco shutdown'),
     'charging_mode': Gauge('bluetti_charging_mode','Charging mode'),
     'power_lifting_on': Gauge('bluetti_power_lifting_on','Power lifting on'),
@@ -690,9 +710,9 @@ class MQTTClient:
 
     async def _handle_command(self, mqtt_message: MQTTMessage):
         # Parse the mqtt_message.topic
-        m = COMMAND_TOPIC_RE.match(mqtt_message.topic)
+        m = COMMAND_TOPIC_RE.match(mqtt_message.topic.value)
         if not m:
-            logging.warn(f'unknown command topic: {mqtt_message.topic}')
+            logging.warn(f'unknown command topic: {mqtt_message.topic.value}')
             return
 
         # Find the matching device for the command

@@ -1,4 +1,5 @@
 from typing import Any, List
+import logging
 from ..commands import ReadHoldingRegisters, WriteSingleRegister
 from .struct import BoolField, DeviceStruct, EnumField
 
@@ -57,7 +58,7 @@ class BluettiDevice:
 
     def build_setter_command(self, field: str, value: Any):
         matches = [f for f in self.struct.fields if f.name == field]
-        device_field = next(f for f in matches if any(f.address in r for r in self.writable_ranges))
+        device_field = next(f for f in matches if any(f.write_address in r for r in self.writable_ranges))
 
         # Convert value to an integer
         if isinstance(device_field, EnumField):
@@ -65,4 +66,4 @@ class BluettiDevice:
         elif isinstance(device_field, BoolField):
             value = 1 if value else 0
 
-        return WriteSingleRegister(device_field.address, value)
+        return WriteSingleRegister(device_field.write_address, value)

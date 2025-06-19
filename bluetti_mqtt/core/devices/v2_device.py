@@ -52,6 +52,16 @@ class ChargingMode(Enum):
     SILENT = 1
     TURBO = 2
 
+@unique
+class CtrlStatus(Enum):
+    POW = 1
+    AC = 2
+    AC_DC = 6
+    AC_GRID = 18
+    DC_GRID = 20
+    AC_DC_GRID = 22
+    AC_DC_INV_GRID = 30
+
 class V2Device(BluettiDevice):
     def __init__(self, address: str, sn: str, type: str):
         super().__init__(address, type, sn)
@@ -133,6 +143,22 @@ class V2Device(BluettiDevice):
         self.struct.add_uint_field("rate_voltage", ProtocolAddress.HOME_DATA.value + 138)
         self.struct.add_uint_field("rate_frequency", ProtocolAddress.HOME_DATA.value + 140)
 
+        ## Inverter BaseInfo
+        self.struct.add_bool_field("grid_charge_on", ProtocolAddress.INV_BASE_SETTINGS_INFO.value + 16
+                                                   , write_address=ProtocolAddress.INV_BASE_SETTINGS_INFO.value +  8)
+        self.struct.add_bool_field("ac_output_on"  , ProtocolAddress.INV_BASE_SETTINGS_INFO.value + 22
+                                                   , write_address=ProtocolAddress.INV_BASE_SETTINGS_INFO.value + 11)
+        self.struct.add_bool_field("dc_output_on"  , ProtocolAddress.INV_BASE_SETTINGS_INFO.value + 24
+                                                   , write_address=ProtocolAddress.INV_BASE_SETTINGS_INFO.value + 12)
+        self.struct.add_bool_field("dc_eco_on"     , ProtocolAddress.INV_BASE_SETTINGS_INFO.value + 28
+                                                   , write_address=ProtocolAddress.INV_BASE_SETTINGS_INFO.value + 14)
+        self.struct.add_bool_field("ac_eco_on"     , ProtocolAddress.INV_BASE_SETTINGS_INFO.value + 34
+                                                   , write_address=ProtocolAddress.INV_BASE_SETTINGS_INFO.value + 17)
+
+        ## Inverter BaseInfo
+        self.struct.add_uint8_field("max_grid_charge_current", ProtocolAddress.INV_ADVANCED_SETTINGS_INFO.value + 29
+                                                             , write_address=ProtocolAddress.INV_ADVANCED_SETTINGS_INFO.value + 14)
+
         ## Inverter GridInfo
         self.struct.add_decimal_field("grid_frequency", ProtocolAddress.INV_GRID_INFO.value + 0, 1)
         self.struct.add_uint32_field("total_grid_power", ProtocolAddress.INV_GRID_INFO.value + 2)
@@ -175,6 +201,13 @@ class V2Device(BluettiDevice):
         self.struct.add_decimal_field("pack_max_chg_voltage", ProtocolAddress.PACK_MAIN_INFO.value + 20, 2)
         self.struct.add_decimal_field("pack_max_chg_current", ProtocolAddress.PACK_MAIN_INFO.value + 22, 1)
         self.struct.add_decimal_field("pack_max_dsg_current", ProtocolAddress.PACK_MAIN_INFO.value + 24, 1)
+        # PACK_SETTING
+        self.entries = 93
+        self.base = ProtocolAddress.INV_BASE_SETTINGS_INFO.value
+        self.offset = 0
+        for index in range (0,self.entries):
+            addr = self.base + self.offset * self.entries + index
+            self.struct.add_bool_field("addr%d" % addr, addr)
 
         mqtt_name_map = {
             'total_pv_power': 'dc_input_power',
@@ -183,12 +216,13 @@ class V2Device(BluettiDevice):
             'total_dc_power': 'dc_output_power',
             # '': 'power_generation', # PV
             'pack_soc': 'total_battery_percent',
-            # '': 'ac_output_on',
-            # '': 'dc_output_on',
+            'ac_output_on': 'ac_output_on',
+            'dc_output_on': 'dc_output_on',
             # '': 'ac_output_mode',
             'inv_phase0_voltage': 'internal_ac_voltage',
             'inv_phase0_current': 'internal_current_one',
             'inv_phase0_power': 'internal_power_one',
+            'inv_working_status': 'inv_working_status',
             # '': 'internal_ac_frequency',
             # '': 'internal_current_two',
             # '': 'internal_power_two',
@@ -201,14 +235,17 @@ class V2Device(BluettiDevice):
             # '': 'ups_mode',
             # '': 'split_phase_on',
             # '': 'split_phase_machine_mode',
-            # '': 'grid_charge_on',
+            'grid_charge_on': 'grid_charge_on',
+            'max_grid_charge_current': 'max_grid_charge_current',
             # '': 'time_control_on',
             # '': 'battery_range_start',
             # '': 'battery_range_end',
+            'pack_soh': 'battery_range_end',
             # '': 'led_mode',
             # '': 'power_off',
             # '': 'auto_sleep_mode',
-            # '': 'eco_on',
+            'ac_echo_on': 'ac_eco_on',
+            'dc_echo_on': 'dc_eco_on',
             # '': 'eco_shutdown',
             # '': 'charging_mode',
             # '': 'power_lifting_on',
@@ -231,6 +268,8 @@ class V2Device(BluettiDevice):
             ReadHoldingRegisters(ProtocolAddress.INV_GRID_INFO.value, 31),
             ReadHoldingRegisters(ProtocolAddress.INV_LOAD_INFO.value, 48),
             ReadHoldingRegisters(ProtocolAddress.PACK_MAIN_INFO.value, 31),
+            ReadHoldingRegisters(ProtocolAddress.INV_BASE_SETTINGS_INFO.value, 93),
+            ReadHoldingRegisters(ProtocolAddress.INV_ADVANCED_SETTINGS_INFO.value, 93),
         ]
 
     @property
@@ -238,9 +277,16 @@ class V2Device(BluettiDevice):
         return [
             # A few of these depend on the protocol version, but newer protocols
             # # seem to just add values after the existing ones
-            ReadHoldingRegisters(ProtocolAddress.BASE_CONFIG.value, 16),
-            ReadHoldingRegisters(ProtocolAddress.HOME_DATA.value, 67),
-            ReadHoldingRegisters(ProtocolAddress.INV_GRID_INFO.value, 31),
-            ReadHoldingRegisters(ProtocolAddress.INV_LOAD_INFO.value, 48),
-            ReadHoldingRegisters(ProtocolAddress.PACK_MAIN_INFO.value, 31),
+            #ReadHoldingRegisters(ProtocolAddress.BASE_CONFIG.value, 16),
+            #ReadHoldingRegisters(ProtocolAddress.HOME_DATA.value, 67),
+            #ReadHoldingRegisters(ProtocolAddress.HOME_DATA.value, 89),
+            #ReadHoldingRegisters(ProtocolAddress.INV_GRID_INFO.value, 31),
+            #ReadHoldingRegisters(ProtocolAddress.INV_LOAD_INFO.value, 48),
+            #ReadHoldingRegisters(ProtocolAddress.PACK_MAIN_INFO.value, 31),
+            #ReadHoldingRegisters(ProtocolAddress.PACK_SETTING.value, 7),
+            ReadHoldingRegisters(self.base + self.offset * self.entries, self.entries),
         ]
+
+    @property
+    def writable_ranges(self) -> List[range]:
+        return [range(ProtocolAddress.HOME_DATA.value,ProtocolAddress.HOME_DATA.value + 90),range(ProtocolAddress.PACK_MAIN_INFO.value,ProtocolAddress.PACK_MAIN_INFO.value + 20),range(ProtocolAddress.INV_BASE_SETTINGS_INFO.value,ProtocolAddress.INV_BASE_SETTINGS_INFO.value+93),range(ProtocolAddress.INV_ADVANCED_SETTINGS_INFO.value,ProtocolAddress.INV_ADVANCED_SETTINGS_INFO.value + 93)]

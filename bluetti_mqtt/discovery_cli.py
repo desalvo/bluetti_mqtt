@@ -74,7 +74,8 @@ async def discover(address: str, encrypted: bool, path: str):
         # Work our way through all the valid addresses
         print('Discovering device data - THIS MAY TAKE SEVERAL HOURS')
         print('0% complete with discovery')
-        max_address = 12500
+        #max_address = 12500
+        max_address = 65535
         last_percent = 0
         for address in range(0, max_address + 1):
             # Log progress
