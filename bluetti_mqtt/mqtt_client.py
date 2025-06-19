@@ -101,6 +101,28 @@ NORMAL_DEVICE_FIELDS = {
             'state_class': 'measurement',
         }
     ),
+    'total_battery_charge_time': MqttFieldConfig(
+        type=MqttFieldType.NUMERIC,
+        setter=False,
+        advanced=False,
+        home_assistant_extra={
+            'name': 'Time To Full Charge',
+            'unit_of_measurement': 'min',
+            'device_class': 'duration',
+            'state_class': 'measurement',
+        }
+    ),
+    'total_battery_discharge_time': MqttFieldConfig(
+        type=MqttFieldType.NUMERIC,
+        setter=False,
+        advanced=False,
+        home_assistant_extra={
+            'name': 'Time Remaining',
+            'unit_of_measurement': 'min',
+            'device_class': 'duration',
+            'state_class': 'measurement',
+        }
+    ),
     'ac_output_on': MqttFieldConfig(
         type=MqttFieldType.BOOL,
         setter=True,
@@ -202,7 +224,7 @@ NORMAL_DEVICE_FIELDS = {
     'ac_input_voltage': MqttFieldConfig(
         type=MqttFieldType.NUMERIC,
         setter=False,
-        advanced=True,
+        advanced=False,
         home_assistant_extra={
             'name': 'AC Input Voltage',
             'unit_of_measurement': 'V',
@@ -238,7 +260,7 @@ NORMAL_DEVICE_FIELDS = {
     'ac_input_frequency': MqttFieldConfig(
         type=MqttFieldType.NUMERIC,
         setter=False,
-        advanced=True,
+        advanced=False,
         home_assistant_extra={
             'name': 'AC Input Frequency',
             'unit_of_measurement': 'Hz',
@@ -479,6 +501,8 @@ PROMETHEUS_FIELDS = {
     'dc_output_power': Gauge('bluetti_dc_output_power','DC output power'),
     'power_generation': Gauge('bluetti_power_generation','Power generation'),
     'total_battery_percent': Gauge('bluetti_total_battery_percent','Total battery percent'),
+    'total_battery_charge_time': Gauge('bluetti_total_battery_charge_time','Total battery charge time'),
+    'total_battery_discharge_time': Gauge('bluetti_total_battery_discharge_time','Total battery discharge time'),
     'ac_output_on': Gauge('bluetti_ac_output_on','AC output on'),
     'dc_output_on': Gauge('bluetti_dc_output_on','DC output on'),
     'ac_output_mode': Gauge('bluetti_ac_output_mode','AC output mode'),

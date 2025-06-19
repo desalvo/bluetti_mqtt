@@ -53,6 +53,13 @@ class ChargingMode(Enum):
     TURBO = 2
 
 @unique
+class UPSMode(Enum):
+    CUSTOMIZED = 1
+    PV_PRIORITY = 2
+    STANDARD = 4
+    TIME_CONTROL = 5
+
+@unique
 class CtrlStatus(Enum):
     POW = 1
     AC = 2
@@ -133,7 +140,6 @@ class V2Device(BluettiDevice):
         self.struct.add_decimal32_field("total_pv_charging_energy", ProtocolAddress.HOME_DATA.value + 108, 1)
         self.struct.add_decimal32_field("total_grid_charging_energy", ProtocolAddress.HOME_DATA.value + 112, 1)
         self.struct.add_decimal32_field("total_feedback_energy", ProtocolAddress.HOME_DATA.value + 116, 1)
-        self.struct.add_enum_field("charging_mode", ProtocolAddress.HOME_DATA.value + 120, ChargingMode)
 
         self.struct.add_uint8_field("inv_working_status", ProtocolAddress.HOME_DATA.value + 123)
         self.struct.add_uint32_field("pv_to_ac_energy", ProtocolAddress.HOME_DATA.value + 124)
@@ -144,18 +150,24 @@ class V2Device(BluettiDevice):
         self.struct.add_uint_field("rate_frequency", ProtocolAddress.HOME_DATA.value + 140)
 
         ## Inverter BaseInfo
-        self.struct.add_bool_field("grid_charge_on", ProtocolAddress.INV_BASE_SETTINGS_INFO.value + 16
-                                                   , write_address=ProtocolAddress.INV_BASE_SETTINGS_INFO.value +  8)
-        self.struct.add_bool_field("ac_output_on"  , ProtocolAddress.INV_BASE_SETTINGS_INFO.value + 22
-                                                   , write_address=ProtocolAddress.INV_BASE_SETTINGS_INFO.value + 11)
-        self.struct.add_bool_field("dc_output_on"  , ProtocolAddress.INV_BASE_SETTINGS_INFO.value + 24
-                                                   , write_address=ProtocolAddress.INV_BASE_SETTINGS_INFO.value + 12)
-        self.struct.add_bool_field("dc_eco_on"     , ProtocolAddress.INV_BASE_SETTINGS_INFO.value + 28
-                                                   , write_address=ProtocolAddress.INV_BASE_SETTINGS_INFO.value + 14)
-        self.struct.add_bool_field("ac_eco_on"     , ProtocolAddress.INV_BASE_SETTINGS_INFO.value + 34
-                                                   , write_address=ProtocolAddress.INV_BASE_SETTINGS_INFO.value + 17)
+        self.struct.add_enum_field("ups_mode"        , ProtocolAddress.INV_BASE_SETTINGS_INFO.value + 10, UPSMode
+                                                     , write_address=ProtocolAddress.INV_BASE_SETTINGS_INFO.value + 5)
+        self.struct.add_bool_field("grid_charge_on"  , ProtocolAddress.INV_BASE_SETTINGS_INFO.value + 16
+                                                     , write_address=ProtocolAddress.INV_BASE_SETTINGS_INFO.value +  8)
+        self.struct.add_bool_field("ac_output_on"    , ProtocolAddress.INV_BASE_SETTINGS_INFO.value + 22
+                                                     , write_address=ProtocolAddress.INV_BASE_SETTINGS_INFO.value + 11)
+        self.struct.add_bool_field("dc_output_on"    , ProtocolAddress.INV_BASE_SETTINGS_INFO.value + 24
+                                                     , write_address=ProtocolAddress.INV_BASE_SETTINGS_INFO.value + 12)
+        self.struct.add_bool_field("dc_eco_on"       , ProtocolAddress.INV_BASE_SETTINGS_INFO.value + 28
+                                                     , write_address=ProtocolAddress.INV_BASE_SETTINGS_INFO.value + 14)
+        self.struct.add_bool_field("ac_eco_on"       , ProtocolAddress.INV_BASE_SETTINGS_INFO.value + 34
+                                                     , write_address=ProtocolAddress.INV_BASE_SETTINGS_INFO.value + 17)
+        self.struct.add_enum_field("charging_mode"   , ProtocolAddress.INV_BASE_SETTINGS_INFO.value + 40, ChargingMode
+                                                     , write_address=ProtocolAddress.INV_BASE_SETTINGS_INFO.value + 20)
+        self.struct.add_bool_field("time_control_on" , ProtocolAddress.INV_BASE_SETTINGS_INFO.value + 58
+                                                     , write_address=ProtocolAddress.INV_BASE_SETTINGS_INFO.value + 29)
 
-        ## Inverter BaseInfo
+        ## Inverter AdvancedInfo
         self.struct.add_uint8_field("max_grid_charge_current", ProtocolAddress.INV_ADVANCED_SETTINGS_INFO.value + 29
                                                              , write_address=ProtocolAddress.INV_ADVANCED_SETTINGS_INFO.value + 14)
 
@@ -207,7 +219,7 @@ class V2Device(BluettiDevice):
         self.offset = 0
         for index in range (0,self.entries):
             addr = self.base + self.offset * self.entries + index
-            self.struct.add_bool_field("addr%d" % addr, addr)
+            self.struct.add_uint_field("addr%d" % addr, addr)
 
         mqtt_name_map = {
             'total_pv_power': 'dc_input_power',
@@ -216,6 +228,7 @@ class V2Device(BluettiDevice):
             'total_dc_power': 'dc_output_power',
             # '': 'power_generation', # PV
             'pack_soc': 'total_battery_percent',
+            'ups_mode': 'ups_mode',
             'ac_output_on': 'ac_output_on',
             'dc_output_on': 'dc_output_on',
             # '': 'ac_output_mode',
@@ -232,14 +245,15 @@ class V2Device(BluettiDevice):
             'grid_frequency': 'ac_input_frequency',
             'pack_voltage': 'total_battery_voltage',
             'pack_current': 'total_battery_current',
+            'pack_chg_full_time': 'total_battery_charge_time',
+            'pack_dsg_empty_time': 'total_battery_discharge_time',
             # '': 'ups_mode',
             # '': 'split_phase_on',
             # '': 'split_phase_machine_mode',
             'grid_charge_on': 'grid_charge_on',
             'max_grid_charge_current': 'max_grid_charge_current',
-            # '': 'time_control_on',
+            'time_control_on': 'time_control_on',
             # '': 'battery_range_start',
-            # '': 'battery_range_end',
             'pack_soh': 'battery_range_end',
             # '': 'led_mode',
             # '': 'power_off',
@@ -289,4 +303,4 @@ class V2Device(BluettiDevice):
 
     @property
     def writable_ranges(self) -> List[range]:
-        return [range(ProtocolAddress.HOME_DATA.value,ProtocolAddress.HOME_DATA.value + 90),range(ProtocolAddress.PACK_MAIN_INFO.value,ProtocolAddress.PACK_MAIN_INFO.value + 20),range(ProtocolAddress.INV_BASE_SETTINGS_INFO.value,ProtocolAddress.INV_BASE_SETTINGS_INFO.value+93),range(ProtocolAddress.INV_ADVANCED_SETTINGS_INFO.value,ProtocolAddress.INV_ADVANCED_SETTINGS_INFO.value + 93)]
+        return [range(ProtocolAddress.HOME_DATA.value,ProtocolAddress.HOME_DATA.value + 190),range(ProtocolAddress.PACK_MAIN_INFO.value,ProtocolAddress.PACK_MAIN_INFO.value + 20),range(ProtocolAddress.INV_BASE_SETTINGS_INFO.value,ProtocolAddress.INV_BASE_SETTINGS_INFO.value+93),range(ProtocolAddress.INV_ADVANCED_SETTINGS_INFO.value,ProtocolAddress.INV_ADVANCED_SETTINGS_INFO.value + 93)]
