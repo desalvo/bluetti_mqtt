@@ -443,7 +443,7 @@ NORMAL_DEVICE_FIELDS = {
         home_assistant_extra={
             'name': 'Charging Mode',
             'icon': 'mdi:battery-charging',
-            'options': ['STANDARD', 'SILENT', 'TURBO'],
+            'options': ['STANDARD', 'SILENT', 'TURBO', 'CUSTOM'],
         }
     ),
     'power_lifting_on': MqttFieldConfig(
